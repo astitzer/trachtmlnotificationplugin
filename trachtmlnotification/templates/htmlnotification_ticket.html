@@ -1,0 +1,41 @@
+<!DOCTYPE html
+    PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:xi="http://www.w3.org/2001/XInclude"
+      xmlns:py="http://genshi.edgewall.org/"
+      xmlns:i18n="http://genshi.edgewall.org/i18n">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <base href="${abs_href.ticket(ticket.id)}" />
+    <title>#${ticket.id} (${ticket.summary})</title>
+  </head>
+  <body>
+    <h1 id="trac-ticket-title">
+      <a href="${abs_href.ticket(ticket.id)}">Ticket #${ticket.id}</a>
+      <span class="status">(${ticket.status}<py:if
+          test="ticket.type"> ${ticket.type}</py:if><py:if
+          test="ticket.resolution">: ${ticket.resolution}</py:if>)</span>
+    </h1>
+    <hr />
+    <xi:include href="ticket_box.html" />
+    <py:for each="change in changes">
+      <hr />
+      <h3><a href="${ticket.link}">${_('Comment (by %(author)s):', author=change.author)}</a></h3>
+      <div id="changelog">
+        <xi:include href="ticket_change.html"/>
+      </div>
+    </py:for>
+    <py:if test="attachments and attachments.attachments">
+      <hr />
+      <xi:include href="list_of_attachments.html"
+                  py:with="alist = attachments; foldable = False"/>
+    </py:if>
+    <hr />
+    <p>
+      ${tag_('Ticket URL: \x3c%(link)s\x3e', link=link)}<br />
+      $project.name &lt;<a href="${project.url or abs_href()}">${project.url or abs_href()}</a>&gt;<br />
+      $project.descr
+    </p>
+  </body>
+</html>
