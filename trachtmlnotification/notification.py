@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import email
+import os.path
 import re
 from email.MIMEText import MIMEText
 from email.MIMEMultipart import MIMEMultipart
@@ -20,6 +21,7 @@ from trac.resource import ResourceNotFound
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.util.datefmt import get_timezone, localtz
+from trac.util.text import to_unicode
 from trac.util.translation import tag_, make_activable, deactivate
 from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
@@ -157,7 +159,8 @@ class HtmlNotificationModule(Component):
                 'show_editor': False,
                 'start_time': ticket['changetime'],
                 'context': context,
-                'attachments': attmod.attachment_data(context),
+                'alist': attmod.attachment_data(context),
+                'styles': self._get_styles(chrome),
                 'link': tag.a(link, href=link),
                 'tag_': tag_,
                })
@@ -165,6 +168,26 @@ class HtmlNotificationModule(Component):
                                           data, fragment=True)
         return unicode(rendered)
 
+    def _get_styles(self, chrome):
+        for provider in chrome.template_providers:
+            for prefix, dir in provider.get_htdocs_dirs():
+                if prefix != 'common':
+                    continue
+                url_re = re.compile(r'\burl\([^\]]*\)')
+                buf = ['#content > hr { display: none }']
+                for name in ('trac.css', 'ticket.css'):
+                    f = open(os.path.join(dir, 'css', name))
+                    try:
+                        lines = f.read().splitlines()
+                    finally:
+                        f.close()
+                    buf.extend(url_re.sub('none', to_unicode(line))
+                               for line in lines
+                               if not line.startswith('@import'))
+                return ('/*<![CDATA[*/\n' +
+                        '\n'.join(buf).replace(']]>', ']]]]><![CDATA[>') +
+                        '\n/*]]>*/')
+        return ''
 
     def _set_charset(self, mime):
         from email.Charset import Charset, QP, BASE64, SHORTEST
