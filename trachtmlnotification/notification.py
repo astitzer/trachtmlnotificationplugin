@@ -141,12 +141,14 @@ class HtmlNotificationModule(Component):
                               if change.get('cnum') == cnum]
         data['changes'] = changes
         context = Context.from_request(req, ticket.resource, absurls=True)
+        alist = attmod.attachment_data(context)
+        alist['can_create'] = False
         data.update({
                 'can_append': False,
                 'show_editor': False,
                 'start_time': ticket['changetime'],
                 'context': context,
-                'alist': attmod.attachment_data(context),
+                'alist': alist,
                 'styles': self._get_styles(chrome),
                 'link': tag.a(link, href=link),
                 'tag_': tag_,
