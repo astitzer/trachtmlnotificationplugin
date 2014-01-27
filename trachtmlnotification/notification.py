@@ -20,6 +20,7 @@ from trac.resource import ResourceNotFound
 from trac.test import Mock, MockPerm
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
+from trac.timeline.web_ui import TimelineModule
 from trac.util.datefmt import get_timezone, localtz
 from trac.util.text import to_unicode
 from trac.util.translation import deactivate, make_activable, reactivate, tag_
@@ -77,11 +78,12 @@ class HtmlNotificationModule(Component):
             return message
 
     def _create_request(self, chrome):
+        locale = self._get_locale()
+        tz = self._get_tz()
         return Mock(href=self.env.abs_href, abs_href=self.env.abs_href,
                     method='POST', authname='anonymous', perm=MockPerm(),
                     session=FakeSession({'dateinfo': 'absolute'}),
-                    args={}, arg_list=(), tz=self._get_tz(),
-                    locale=self._get_locale(), lc_time='iso8601',
+                    args={}, arg_list=(), tz=tz, locale=locale, lc_time=locale,
                     chrome={'notices': [], 'warnings': []})
 
     def _get_tz(self):
@@ -154,8 +156,11 @@ class HtmlNotificationModule(Component):
                 'link': tag.a(link, href=link),
                 'tag_': tag_,
                })
-        rendered = chrome.render_template(req, 'htmlnotification_ticket.html',
-                                          data, fragment=True)
+        template = 'htmlnotification_ticket.html'
+        # use pretty_dateinfo in TimelineModule
+        TimelineModule(self.env).post_process_request(req, template, data,
+                                                      None)
+        rendered = chrome.render_template(req, template, data, fragment=True)
         return unicode(rendered)
 
     def _get_styles(self, chrome):
