@@ -16,14 +16,13 @@ from trac.attachment import AttachmentModule
 from trac.env import Environment
 from trac.mimeview.api import Context
 from trac.notification import SmtpEmailSender, SendmailEmailSender
-from trac.perm import PermissionCache
 from trac.resource import ResourceNotFound
+from trac.test import Mock, MockPerm
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.util.datefmt import get_timezone, localtz
 from trac.util.text import to_unicode
 from trac.util.translation import tag_, make_activable, deactivate
-from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
 from trac.web.main import FakeSession
 
@@ -77,30 +76,18 @@ class HtmlNotificationModule(Component):
             return message
 
     def _create_request(self, chrome):
-        req = Request({'REQUEST_METHOD': 'GET',
-                       'trac.base_url': self.env.abs_href(),
-                      },
-                      lambda *args, **kwargs: None)
-        req.arg_list = ()
-        req.args = {}
-        req.authname = 'anonymous'
-        req.session = FakeSession({'dateinfo': 'absolute'})
-        req.perm = PermissionCache(self.env, req.authname)
-        req.href = req.abs_href
-        req.callbacks.update({
-            'chrome': chrome.prepare_request,
-            'tz': self._get_tz,
-            'locale': self._get_locale,
-            'lc_time': lambda req: 'iso8601',
-        })
+        return Mock(href=self.env.abs_href, abs_href=self.env.abs_href,
+                    method='POST', authname='anonymous', perm=MockPerm(),
+                    session=FakeSession({'dateinfo': 'absolute'}),
+                    args={}, arg_list=(), tz=self._get_tz(),
+                    locale=self._get_locale(), lc_time='iso8601',
+                    chrome={'notices': [], 'warnings': []})
 
-        return req
-
-    def _get_tz(self, req):
+    def _get_tz(self):
         tzname = self.config.get('trac', 'default_timezone')
         return get_timezone(tzname) or localtz
 
-    def _get_locale(self, req):
+    def _get_locale(self):
         lang = self.config.get('trac', 'default_language')
         return _parse_locale(lang)
 
