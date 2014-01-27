@@ -22,7 +22,7 @@ from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.util.datefmt import get_timezone, localtz
 from trac.util.text import to_unicode
-from trac.util.translation import tag_, make_activable, deactivate
+from trac.util.translation import deactivate, make_activable, reactivate, tag_
 from trac.web.chrome import Chrome, ITemplateProvider
 from trac.web.main import FakeSession
 
@@ -65,11 +65,12 @@ class HtmlNotificationModule(Component):
         try:
             chrome = Chrome(self.env)
             req = self._create_request(chrome)
+            t = deactivate()
             try:
                 make_activable(lambda: req.locale, self.env.path)
                 return self._substitute_message(chrome, req, message)
             finally:
-                deactivate()
+                reactivate(t)
         except:
             self.log.warn('Caught exception while substituting message',
                           exc_info=True)
