@@ -22,4 +22,5 @@ setup(
             'trachtmlnotification.notification = trachtmlnotification.notification',
         ],
     },
+    test_suite = 'trachtmlnotification.tests',
     **extra)

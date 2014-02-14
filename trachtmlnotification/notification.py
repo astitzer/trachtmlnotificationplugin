@@ -6,10 +6,11 @@ import re
 from email.MIMEText import MIMEText
 from email.MIMEMultipart import MIMEMultipart
 from genshi.builder import tag
+Locale = None
 try:
     from babel.core import Locale
 except ImportError:
-    Locale = None
+    pass
 
 from trac.core import Component, implements
 from trac.attachment import AttachmentModule
@@ -17,13 +18,14 @@ from trac.env import Environment
 from trac.mimeview.api import Context
 from trac.notification import SmtpEmailSender, SendmailEmailSender
 from trac.resource import ResourceNotFound
-from trac.test import Mock, MockPerm
+from trac.test import MockPerm
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.timeline.web_ui import TimelineModule
 from trac.util.datefmt import get_timezone, localtz
 from trac.util.text import to_unicode
 from trac.util.translation import deactivate, make_activable, reactivate, tag_
+from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
 from trac.web.main import FakeSession
 
@@ -62,10 +64,10 @@ class HtmlNotificationModule(Component):
         from pkg_resources import resource_filename
         return [resource_filename(__name__, 'templates')]
 
-    def substitute_message(self, message):
+    def substitute_message(self, message, ignore_exc=True):
         try:
             chrome = Chrome(self.env)
-            req = self._create_request(chrome)
+            req = self._create_request()
             t = deactivate()
             try:
                 make_activable(lambda: req.locale, self.env.path)
@@ -75,24 +77,36 @@ class HtmlNotificationModule(Component):
         except:
             self.log.warn('Caught exception while substituting message',
                           exc_info=True)
-            return message
+            if ignore_exc:
+                return message
+            raise
 
-    def _create_request(self, chrome):
-        locale = self._get_locale()
-        tz = self._get_tz()
-        return Mock(href=self.env.abs_href, abs_href=self.env.abs_href,
-                    method='POST', authname='anonymous', perm=MockPerm(),
-                    session=FakeSession({'dateinfo': 'absolute'}),
-                    args={}, arg_list=(), tz=tz, locale=locale, lc_time=locale,
-                    chrome={'notices': [], 'warnings': []})
-
-    def _get_tz(self):
+    def _create_request(self):
+        languages = filter(None, [self.config.get('trac', 'default_language')])
+        if languages:
+            locale = _parse_locale(languages[0])
+        else:
+            locale = None
         tzname = self.config.get('trac', 'default_timezone')
-        return get_timezone(tzname) or localtz
-
-    def _get_locale(self):
-        lang = self.config.get('trac', 'default_language')
-        return _parse_locale(lang)
+        tz = get_timezone(tzname) or localtz
+        environ = {'REQUEST_METHOD': 'POST', 'REMOTE_ADDR': '127.0.0.1',
+                   'SERVER_NAME': 'localhost', 'SERVER_PORT': '80',
+                   'wsgi.url_scheme': 'http',
+                   'trac.base_url': self.env.abs_href()}
+        if languages:
+            environ['HTTP_ACCEPT_LANGUAGE'] = ','.join(languages)
+        req = Request(environ, lambda *args, **kwargs: None)
+        req.arg_list = ()
+        req.args = {}
+        req.authname = 'anonymous'
+        req.session = FakeSession({'dateinfo': 'absolute'})
+        req.perm = MockPerm()
+        req.href = req.abs_href
+        req.locale = locale
+        req.lc_time = locale
+        req.tz = tz
+        req.chrome = {'notices': [], 'warnings': []}
+        return req
 
     def _substitute_message(self, chrome, req, message):
         parsed = email.message_from_string(message)
