@@ -171,6 +171,7 @@ class HtmlNotificationModule(Component):
         return req
 
     def _substitute_message(self, chrome, req, message):
+        self.log.warn('HELLO FROM _substitute_message')
         parsed = email.message_from_string(message)
         link = parsed.get('X-Trac-Ticket-URL')
         if not link:
