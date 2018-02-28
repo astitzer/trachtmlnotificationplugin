@@ -278,6 +278,7 @@ class HtmlNotificationModule(Component):
         return unicode(rendered)
 
     def _embed_images(self, html, req):
+        self.log.warn('HELLO FROM _embed_images')
         img_re = re.compile('<img[^>]* src="%s/([^/]+)/([^/]+/[^"]+)"[^>]*/>' %
                             re.escape(req.abs_href('raw-attachment')))
         src_re = re.compile(' src="[^"]+"')
