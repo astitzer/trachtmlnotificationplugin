@@ -351,7 +351,7 @@ class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
     def send(self, from_addr, recipients, message):
         if INotificationFormatter:
             mod = HtmlNotificationModule(self.env)
-            message = 'test'
+            message = mod.substitute_message(message)
         SmtpEmailSender.send(self, from_addr, recipients, message)
 
 
