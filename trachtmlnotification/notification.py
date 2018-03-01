@@ -62,10 +62,7 @@ else:
 
 class HtmlNotificationModule(Component):
 
-    if INotificationFormatter:
-        implements(INotificationFormatter, ITemplateProvider)
-    else:
-        implements(ITemplateProvider)
+    implements(ITemplateProvider)
 
     # INotificationFormatter methods
 
