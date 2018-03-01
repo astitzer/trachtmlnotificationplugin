@@ -285,6 +285,7 @@ class HtmlNotificationModule(Component):
         src_re = re.compile(' src="[^"]+"')
         attachments = {}
         def repl(match):
+            return match.group(1)
             realm = match.group(1)
             path = match.group(2)
             idx = sha1(realm + '/' + path).hexdigest()
