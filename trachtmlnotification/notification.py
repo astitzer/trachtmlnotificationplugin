@@ -285,7 +285,6 @@ class HtmlNotificationModule(Component):
         src_re = re.compile(' src="[^"]+"')
         attachments = {}
         def repl(match):
-            return match.group(1)
             realm = match.group(1)
             path = match.group(2)
             idx = sha1(realm + '/' + path).hexdigest()
@@ -352,6 +351,7 @@ class HtmlNotificationModule(Component):
 class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
 
     def send(self, from_addr, recipients, message):
+        return '';
         if not INotificationFormatter:
             mod = HtmlNotificationModule(self.env)
             message = mod.substitute_message(message)
