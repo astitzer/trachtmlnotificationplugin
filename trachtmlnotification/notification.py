@@ -31,11 +31,6 @@ from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
 from trac.web.main import FakeSession
 
-try:
-    from trac.notification.api import INotificationFormatter
-except ImportError:
-    INotificationFormatter = None
-
 
 _TICKET_URI_RE = re.compile(r'/ticket/(?P<tktid>[0-9]+)'
                             r'(?:#comment:(?P<cnum>[0-9]+))?\Z')
