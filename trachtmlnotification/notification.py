@@ -174,21 +174,25 @@ class HtmlNotificationModule(Component):
         parsed = email.message_from_string(message)
         link = parsed.get('X-Trac-Ticket-URL')
         if not link:
+            return 'test'
             return message
         match = _TICKET_URI_RE.search(link)
         if not match:
+            return 'test2'
             return message
         tktid = match.group('tktid')
         cnum = match.group('cnum')
         if cnum is not None:
             cnum = int(cnum)
 
+        return 'test3'
+
         db = _get_db(self.env)
         try:
             ticket = Ticket(self.env, tktid)
         except ResourceNotFound:
             return message
-        return 'test'
+
         headers = {}
         for header, value in parsed.items():
             lower = header.lower()
