@@ -171,7 +171,6 @@ class HtmlNotificationModule(Component):
         return req
 
     def _substitute_message(self, chrome, req, message):
-        self.log.warn('HELLO FROM _substitute_message')
         parsed = email.message_from_string(message)
         link = parsed.get('X-Trac-Ticket-URL')
         if not link:
@@ -189,7 +188,7 @@ class HtmlNotificationModule(Component):
             ticket = Ticket(self.env, tktid)
         except ResourceNotFound:
             return message
-
+        return 'test'
         headers = {}
         for header, value in parsed.items():
             lower = header.lower()
@@ -352,7 +351,6 @@ class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
 
     def send(self, from_addr, recipients, message):
         if not INotificationFormatter:
-            return '';
             mod = HtmlNotificationModule(self.env)
             message = mod.substitute_message(message)
         SmtpEmailSender.send(self, from_addr, recipients, message)
