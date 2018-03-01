@@ -3,7 +3,6 @@
 import email
 import os.path
 import re
-from email.MIMEImage import MIMEImage
 from email.MIMEText import MIMEText
 from email.MIMEMultipart import MIMEMultipart
 from genshi.builder import tag
@@ -13,19 +12,18 @@ try:
 except ImportError:
     pass
 
-from trac.core import Component, TracError, implements
-from trac.attachment import Attachment, AttachmentModule
+from trac.core import Component, implements
+from trac.attachment import AttachmentModule
 from trac.env import Environment
-from trac.mimeview.api import Context, Mimeview
+from trac.mimeview.api import Context
 from trac.notification import SmtpEmailSender, SendmailEmailSender
 from trac.resource import ResourceNotFound
 from trac.test import MockPerm
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.timeline.web_ui import TimelineModule
-from trac.util.compat import sha1
-from trac.util.datefmt import get_timezone, localtz, to_utimestamp
-from trac.util.text import exception_to_unicode, to_unicode, unicode_unquote
+from trac.util.datefmt import get_timezone, localtz
+from trac.util.text import to_unicode
 from trac.util.translation import deactivate, make_activable, reactivate, tag_
 from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
@@ -59,52 +57,6 @@ class HtmlNotificationModule(Component):
 
     implements(ITemplateProvider)
 
-    # INotificationFormatter methods
-
-    def get_supported_styles(self, transport):
-        yield 'text/html', 'ticket'
-
-    def format(self, transport, style, event):
-        if style != 'text/html' or event.realm != 'ticket':
-            return
-        chrome = Chrome(self.env)
-        req = self._create_request()
-        ticket = event.target
-        cnum = None
-        if event.time:
-            db = self.env.get_read_db()
-            cursor = db.cursor()
-            cursor.execute("""\
-                SELECT field, oldvalue FROM ticket_change
-                WHERE ticket=%s AND time=%s AND field='comment'
-                """, (ticket.id, to_utimestamp(event.time)))
-            for field, oldvalue in cursor:
-                if oldvalue:
-                    cnum = int(oldvalue.rsplit('.', 1)[-1])
-                    break
-        link = self.env.abs_href.ticket(ticket.id)
-        if cnum is not None:
-            link += '#comment:%d' % cnum
-
-        try:
-            tx = deactivate()
-            try:
-                make_activable(lambda: req.locale, self.env.path)
-                content = self._create_html_body(chrome, req, ticket, cnum,
-                                                 link)
-            finally:
-                reactivate(tx)
-        except:
-            self.log.warn('Caught exception while generating html part',
-                          exc_info=True)
-            raise
-        if isinstance(content, unicode):
-            # avoid UnicodeEncodeError from MIMEText()
-            content = content.encode('utf-8')
-        return content
-
-    # ITemplateProvider methods
-
     def get_htdocs_dirs(self):
         return ()
 
@@ -112,26 +64,22 @@ class HtmlNotificationModule(Component):
         from pkg_resources import resource_filename
         return [resource_filename(__name__, 'templates')]
 
-    # public methods
-
     def substitute_message(self, message, ignore_exc=True):
         try:
             chrome = Chrome(self.env)
             req = self._create_request()
-            tx = deactivate()
+            t = deactivate()
             try:
                 make_activable(lambda: req.locale, self.env.path)
                 return self._substitute_message(chrome, req, message)
             finally:
-                reactivate(tx)
+                reactivate(t)
         except:
             self.log.warn('Caught exception while substituting message',
                           exc_info=True)
             if ignore_exc:
                 return message
             raise
-
-    # private methods
 
     def _create_request(self):
         languages = filter(None, [self.config.get('trac', 'default_language')])
@@ -147,13 +95,11 @@ class HtmlNotificationModule(Component):
                    'trac.base_url': self.env.abs_href()}
         if languages:
             environ['HTTP_ACCEPT_LANGUAGE'] = ','.join(languages)
-        session = FakeSession()
-        session['dateinfo'] = 'absolute'
         req = Request(environ, lambda *args, **kwargs: None)
         req.arg_list = ()
         req.args = {}
         req.authname = 'anonymous'
-        req.session = session
+        req.session = FakeSession({'dateinfo': 'absolute'})
         req.perm = MockPerm()
         req.href = req.abs_href
         req.locale = locale
@@ -181,58 +127,20 @@ class HtmlNotificationModule(Component):
         except ResourceNotFound:
             return message
 
-        headers = {}
+        container = MIMEMultipart('alternative')
         for header, value in parsed.items():
             lower = header.lower()
             if lower in ('content-type', 'content-transfer-encoding'):
                 continue
             if lower != 'mime-version':
-                headers[header] = value
+                container[header] = value
             del parsed[header]
         container.attach(parsed)
 
-        alternative = MIMEMultipart('alternative')
-        alternative.attach(parsed)  # original body as text/plain
         html = self._create_html_body(chrome, req, ticket, cnum, link)
-        html, attachments = self._embed_images(html, req)
         part = MIMEText(html.encode('utf-8'), 'html')
         self._set_charset(part)
-        
-        alternative.attach(part)
-        if attachments:
-            related = MIMEMultipart('related')
-            related.attach(alternative)
-            container = related
-        else:
-            container = alternative
-        mimeview = Mimeview(self.env)
-        for idx, att in attachments.iteritems():
-            try:
-                f = att.open()
-                try:
-                    content = f.read()
-                    filename = att.filename
-                    mimetype = mimeview.get_mimetype(filename, content=content)
-                    if mimetype.startswith('image/'):
-                        mimetype = mimetype[6:]
-                    else:
-                        mimetype = 'unknown'
-                    part = MIMEImage(content, mimetype)
-                    del part['MIME-Version']
-                    part.add_header('Content-Disposition', 'inline',
-                                    filename=filename)
-                    part.add_header('Content-ID', '<%s>' % idx)
-                    container.attach(part)
-                finally:
-                    f.close()
-            except ResourceNotFound:
-                pass
-            except TracError, e:
-                self.log.warn('Exception caught while attaching a file: %s',
-                              exception_to_unicode(e))
-
-        for header, value in headers.iteritems():
-            container[header] = value
+        container.attach(part)
 
         return container.as_string()
 
@@ -268,31 +176,6 @@ class HtmlNotificationModule(Component):
                                                       None)
         rendered = chrome.render_template(req, template, data, fragment=True)
         return unicode(rendered)
-
-    def _embed_images(self, html, req):
-        img_re = re.compile('<img[^>]* src="%s/([^/]+)/([^/]+/[^"]+)"[^>]*/>' %
-                            re.escape(req.abs_href('raw-attachment')))
-        src_re = re.compile(' src="[^"]+"')
-        attachments = {}
-        def repl(match):
-            realm = match.group(1)
-            path = match.group(2)
-            idx = sha1(realm + '/' + path).hexdigest()
-            if idx not in attachments:
-                parent_id, filename = map(unicode_unquote,
-                                          path.rsplit('/', 1))
-                try:
-                    att = Attachment(self.env, realm, parent_id, filename)
-                except ResourceNotFound:
-                    attachments[idx] = None
-                else:
-                    attachments[idx] = att
-            text = match.group(0)
-            if attachments[idx]:
-                text = src_re.sub(lambda m: ' src="cid:%s"' % idx, text)
-            return text
-
-        return img_re.sub(repl, html), attachments
 
     def _get_styles(self, chrome):
         for provider in chrome.template_providers:
@@ -349,7 +232,6 @@ class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
 class HtmlNotificationSendmailEmailSender(SendmailEmailSender):
 
     def send(self, from_addr, recipients, message):
-        if not INotificationFormatter:
-            mod = HtmlNotificationModule(self.env)
-            message = mod.substitute_message(message)
+        mod = HtmlNotificationModule(self.env)
+        message = mod.substitute_message(message)
         SendmailEmailSender.send(self, from_addr, recipients, message)
