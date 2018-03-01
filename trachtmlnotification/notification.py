@@ -127,14 +127,12 @@ class HtmlNotificationModule(Component):
             chrome = Chrome(self.env)
             req = self._create_request()
             tx = deactivate()
-            return 'test'
             try:
                 make_activable(lambda: req.locale, self.env.path)
                 return self._substitute_message(chrome, req, message)
             finally:
                 reactivate(tx)
         except:
-            return 'test2'
             self.log.warn('Caught exception while substituting message',
                           exc_info=True)
             if ignore_exc:
@@ -355,7 +353,7 @@ class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
         if not INotificationFormatter:
             mod = HtmlNotificationModule(self.env)
             message = mod.substitute_message(message)
-        SmtpEmailSender.send(self, from_addr, recipients, message)
+        SmtpEmailSender.send(self, from_addr, recipients, 'test')
 
 
 class HtmlNotificationSendmailEmailSender(SendmailEmailSender):
