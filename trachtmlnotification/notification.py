@@ -278,7 +278,6 @@ class HtmlNotificationModule(Component):
         return unicode(rendered)
 
     def _embed_images(self, html, req):
-        self.log.warn('HELLO FROM _embed_images')
         img_re = re.compile('<img[^>]* src="%s/([^/]+)/([^/]+/[^"]+)"[^>]*/>' %
                             re.escape(req.abs_href('raw-attachment')))
         src_re = re.compile(' src="[^"]+"')
@@ -352,8 +351,9 @@ class HtmlNotificationSmtpEmailSender(SmtpEmailSender):
     def send(self, from_addr, recipients, message):
         if not INotificationFormatter:
             mod = HtmlNotificationModule(self.env)
-            message = mod.substitute_message(message)
-        SmtpEmailSender.send(self, from_addr, recipients, 'test')
+            message = 'testers'
+            # message = mod.substitute_message(message)
+        SmtpEmailSender.send(self, from_addr, recipients, message)
 
 
 class HtmlNotificationSendmailEmailSender(SendmailEmailSender):
