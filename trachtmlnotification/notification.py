@@ -176,7 +176,7 @@ class HtmlNotificationModule(Component):
             except TracError, e:
                 self.log.warn('Exception caught while attaching a file: %s',
                               exception_to_unicode(e))
-     
+
         for header, value in headers.iteritems():
             container[header] = value
         return container.as_string()
