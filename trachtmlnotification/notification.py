@@ -3,8 +3,9 @@
 import email
 import os.path
 import re
-from email.MIMEText import MIMEText
+from email.MIMEImage import MIMEImage
 from email.MIMEMultipart import MIMEMultipart
+from email.MIMEText import MIMEText
 from genshi.builder import tag
 Locale = None
 try:
@@ -12,18 +13,19 @@ try:
 except ImportError:
     pass
 
-from trac.core import Component, implements
-from trac.attachment import AttachmentModule
+from trac.core import Component, TracError, implements
+from trac.attachment import Attachment, AttachmentModule
 from trac.env import Environment
-from trac.mimeview.api import Context
+from trac.mimeview.api import Context, Mimeview
 from trac.notification import SmtpEmailSender, SendmailEmailSender
 from trac.resource import ResourceNotFound
 from trac.test import MockPerm
 from trac.ticket.model import Ticket
 from trac.ticket.web_ui import TicketModule
 from trac.timeline.web_ui import TimelineModule
+from trac.util.compat import sha1
 from trac.util.datefmt import get_timezone, localtz
-from trac.util.text import to_unicode
+from trac.util.text import exception_to_unicode, to_unicode, unicode_unquote
 from trac.util.translation import deactivate, make_activable, reactivate, tag_
 from trac.web.api import Request
 from trac.web.chrome import Chrome, ITemplateProvider
@@ -95,11 +97,13 @@ class HtmlNotificationModule(Component):
                    'trac.base_url': self.env.abs_href()}
         if languages:
             environ['HTTP_ACCEPT_LANGUAGE'] = ','.join(languages)
+        session = FakeSession()
+        session['dateinfo'] = 'absolute'
         req = Request(environ, lambda *args, **kwargs: None)
         req.arg_list = ()
         req.args = {}
         req.authname = 'anonymous'
-        req.session = FakeSession({'dateinfo': 'absolute'})
+        req.session = session
         req.perm = MockPerm()
         req.href = req.abs_href
         req.locale = locale
@@ -127,21 +131,56 @@ class HtmlNotificationModule(Component):
         except ResourceNotFound:
             return message
 
-        container = MIMEMultipart('alternative')
+        headers = {}
         for header, value in parsed.items():
             lower = header.lower()
             if lower in ('content-type', 'content-transfer-encoding'):
                 continue
             if lower != 'mime-version':
-                container[header] = value
+                headers[header] = value
             del parsed[header]
-        container.attach(parsed)
 
+        alternative = MIMEMultipart('alternative')
+        alternative.attach(parsed)  # original body as text/plain
         html = self._create_html_body(chrome, req, ticket, cnum, link)
+        html, attachments = self._embed_images(html, req)
         part = MIMEText(html.encode('utf-8'), 'html')
         self._set_charset(part)
-        container.attach(part)
+        alternative.attach(part)
+        if attachments:
+            related = MIMEMultipart('related')
+            related.attach(alternative)
+            container = related
+        else:
+            container = alternative
+        mimeview = Mimeview(self.env)
+        for idx, att in attachments.iteritems():
+            try:
+                f = att.open()
+                try:
+                    content = f.read()
+                    filename = att.filename
+                    mimetype = mimeview.get_mimetype(filename, content=content)
+                    if mimetype.startswith('image/'):
+                        mimetype = mimetype[6:]
+                    else:
+                        mimetype = 'unknown'
+                    part = MIMEImage(content, mimetype)
+                    del part['MIME-Version']
+                    part.add_header('Content-Disposition', 'inline',
+                                    filename=filename)
+                    part.add_header('Content-ID', '<%s>' % idx)
+                    container.attach(part)
+                finally:
+                    f.close()
+            except ResourceNotFound:
+                pass
+            except TracError, e:
+                self.log.warn('Exception caught while attaching a file: %s',
+                              exception_to_unicode(e))
 
+        for header, value in headers.iteritems():
+            container[header] = value
         return container.as_string()
 
     def _create_html_body(self, chrome, req, ticket, cnum, link):
@@ -176,6 +215,31 @@ class HtmlNotificationModule(Component):
                                                       None)
         rendered = chrome.render_template(req, template, data, fragment=True)
         return unicode(rendered)
+
+    def _embed_images(self, html, req):
+        img_re = re.compile('<img[^>]* src="%s/([^/]+)/([^/]+/[^"]+)"[^>]*/>' %
+                            re.escape(req.abs_href('raw-attachment')))
+        src_re = re.compile(' src="[^"]+"')
+        attachments = {}
+        def repl(match):
+            realm = match.group(1)
+            path = match.group(2)
+            idx = sha1(realm + '/' + path).hexdigest()
+            if idx not in attachments:
+                parent_id, filename = map(unicode_unquote,
+                                          path.rsplit('/', 1))
+                try:
+                    att = Attachment(self.env, realm, parent_id, filename)
+                except ResourceNotFound:
+                    attachments[idx] = None
+                else:
+                    attachments[idx] = att
+            text = match.group(0)
+            if attachments[idx]:
+                text = src_re.sub(lambda m: ' src="cid:%s"' % idx, text)
+            return text
+
+        return img_re.sub(repl, html), attachments
 
     def _get_styles(self, chrome):
         for provider in chrome.template_providers:
