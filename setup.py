@@ -7,7 +7,7 @@ extra = {}
 
 setup(
     name = 'TracHtmlNotificationPlugin',
-    version = '0.12.0.1',
+    version = '0.13',
     description = 'Send ticket notification with HTML part (t:#2625)',
     license = 'BSD',  # the same as Trac
     url = 'http://trac-hacks.org/wiki/TracHtmlNotificationPlugin',
